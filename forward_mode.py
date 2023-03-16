@@ -1,4 +1,5 @@
 import numpy as np
+import matplotlib.pyplot as plt
 
 class Var:
     def __init__(self, val, grad):
@@ -50,38 +51,85 @@ class Var:
     def __rpow__(self, other):
         assert not isinstance(other, Var)
         return Var(other ** self.val, other ** (self.val - 1) * (other * self.grad * np.emath.log(other)))
+    
+    def __matmul__(self, other):
+        assert not isinstance(other, Var) or not np.any(other.grad)
+        if isinstance(other, Var):
+            other = other.val
+        return Var(self.val @ other, self.grad @ other)
 
     
-def vector_sum():
-    pass
+def vector_sum(vec):
+    return Var(np.sum(vec.val), np.sum(vec.grad))
+
+
+def element_to_var(e):
+    return Var(e, 0)
+
+def relu(x):
+    grad = 0 if x.val < 0 else x.grad
+    return Var(np.maximum(x.val, 0), grad)
+
+relu_vec = np.vectorize(relu)
+
+def tanh(x):
+    return Var(np.tanh(x.val), 1 - np.tanh(x.grad)**2)
+
+tanh_vec = np.vectorize(tanh)
+
+get_val_vec = np.vectorize(lambda x: x.val)
+
+
+np_to_var = np.vectorize(element_to_var)
 
 
 if __name__ == '__main__':
-    x = np.random.uniform(0, 200, size=(10,))
-    y = 3 * x + 5
+    x = np.linspace(0, 5, 50).reshape(1, 50)
+    y = np.sin(x)
     
-    
-    w = Var(0, 0)
-    b = Var(0, 0)
-    params = [w, b]
+    plt.ion()
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
 
-    learning_rate = 0.00006
+    hidden_sizes = [(10, 1), (10, 10), (5, 10), (1, 5)]
+
+    weights = []
+    biases = []
+    for size in hidden_sizes:
+        weights.append(np_to_var(np.random.normal(size=size)))
+        biases.append(np_to_var(np.random.normal(size=(size[0], 1))))
+
+
+    def forward(x, w, b):
+        r = w[0] @ x + b[0]
+        for i in range(1, len(w)):
+            r = w[i] @ tanh_vec(r) + b[i]
+        return r
+        
+    
+    params = []
+    for l in weights + biases:
+        params += l.flatten().tolist()
+
+    line_base, line1 = ax.plot(x.flatten(), y.flatten(), 'b-', x.flatten(), get_val_vec(forward(x, weights, biases)).flatten(), 'r-')
+
+    learning_rate = 0.005
     
     loss = Var(100000, 0)
 
     while loss.val > 0.0001:
         loss = None
-        for n in range(len(x)):
-            for i in range(len(params)):
-                # we're only considering derivative with respect to 1 param at a time
-                for param in params:
-                    param.zero_grad()
-                params[i].grad = 1
-                
-                loss = ((w * x[n] + b) - y[n])**2
-                params[i].val -= loss.grad * learning_rate
+        for i in range(len(params)):
+            # we're only considering derivative with respect to 1 param at a time
+            for param in params:
+                param.zero_grad()
+            params[i].grad = 1
+            
+            loss = np.sum((forward(x, weights, biases) - y)**2)
+            params[i].val -= loss.grad * learning_rate
         print(f'Loss: {loss.val}')
-        print(f'w: {w.val}')
-        print(f'b: {b.val}')
+        line1.set_ydata(get_val_vec(forward(x, weights, biases)).flatten())
+        fig.canvas.draw()
+        fig.canvas.flush_events()
 
         
