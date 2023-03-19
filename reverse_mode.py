@@ -166,6 +166,7 @@ class Sum(Op):
         
 
 def initialize_adam_parameters(params):
+    '''Adam optimization params'''
     adam_params = []
     for param in params:
         adam_params.append({
@@ -176,6 +177,7 @@ def initialize_adam_parameters(params):
     return adam_params
 
 def update_parameters_adam(params, grads, adam_params, learning_rate=0.001, beta1=0.9, beta2=0.999, epsilon=1e-8):
+    '''Update weights inplace given gradients and adam_params'''
     for param, grad, adam_param in zip(params, grads, adam_params):
         adam_param['t'] += 1
         adam_param['m'] = beta1 * adam_param['m'] + (1 - beta1) * grad
