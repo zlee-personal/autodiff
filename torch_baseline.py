@@ -1,6 +1,6 @@
 from torch.nn import Linear, ReLU, MSELoss, Module, ParameterList, Sigmoid
 from torch import tensor
-from torch.optim import SGD, Adam, RMSprop
+from torch import optim
 import numpy as np
 import torch
 import matplotlib.pyplot as plt
@@ -29,16 +29,16 @@ if __name__ == '__main__':
     sizes = [(1, 500), (500, 500), (500, 1)]
     model = Model(sizes)
     criterion = MSELoss()
-    optimizer = Adam(params=model.parameters())
+    optimizer = optim.RAdam(params=model.parameters())
     
-    x = tensor(np.linspace(0, 2*np.pi, 100).reshape((100, 1)), dtype=torch.float32)
+    x = tensor(np.linspace(-np.pi, np.pi, 100).reshape((100, 1)), dtype=torch.float32)
     y_target = torch.sin(x)
     
     loss_val = 1
 
     line_base, line1 = ax.plot(x.detach().numpy(), y_target.detach().numpy(), 'b-', x.detach().numpy(), model(x).detach().numpy(), 'r-')
 
-    while loss_val > 0.0001:
+    while loss_val > 0.0000001:
         optimizer.zero_grad()
         y_pred = model(x)
         loss = criterion(y_pred, y_target)

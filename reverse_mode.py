@@ -1,4 +1,5 @@
 from abc import ABC, abstractclassmethod
+from sklearn.model_selection import train_test_split
 import numpy as np
 from typing import List, Union
 import matplotlib.pyplot as plt
@@ -172,6 +173,7 @@ def initialize_adam_parameters(params):
         adam_params.append({
             'm': np.zeros_like(param.val),
             'v': np.zeros_like(param.val),
+            's': np.ones_like(param.val),
             't': 0
         })
     return adam_params
@@ -185,8 +187,13 @@ def update_parameters_adam(params, grads, adam_params, learning_rate=0.001, beta
 
         m_hat = adam_param['m'] / (1 - beta1 ** adam_param['t'])
         v_hat = adam_param['v'] / (1 - beta2 ** adam_param['t'])
+        same_signs = (grad * m_hat > 0).astype(float)
+        adam_param['s'] += (.2 * same_signs) * adam_param['s']
+        diff_signs = 1 - same_signs
+        adam_param['s'] -= (0.5 * diff_signs) * adam_param['s']
+        step_size = adam_param['s']
 
-        param.val -= learning_rate * m_hat / (np.sqrt(v_hat) + epsilon)
+        param.val -= step_size * learning_rate * m_hat / (np.sqrt(v_hat) + epsilon)
 
 
 def compute_dC_dA(A, B):
@@ -254,42 +261,69 @@ if __name__ == '__main__':
 
 
     # Define input data and target
-    x = Var(np.linspace(-np.pi, np.pi, 100).reshape((100, 1)))
-    y_target = Var(np.sin(x.val)+2*(np.sin(3*x.val)))
+    x = np.linspace(-np.pi, np.pi, 1000).reshape((1000, 1))
+    y_target = np.sin(x)+2*(np.sin(3*x))
+    
+    x_train, x_test, y_train, y_test = train_test_split(x, y_target)
+    
+
+    # order for plotting
+    test_order = np.argsort(x_test, axis=0)
+    x_test_ordered = x_test[test_order, 0]
+    y_test_ordered = y_test[test_order, 0]
     
     
-    line_base, line1 = ax.plot(x.val, y_target.val, 'b-', x.val, forward(x, weights, biases).val, 'r-')
+    
+    line_base, line1 = ax.plot(x_test_ordered,
+                               y_test_ordered,
+                               'b-',
+                               x_test_ordered, 
+                               forward(Var(x_test_ordered), weights, biases).val,
+                               'r-')
 
     loss_val = 1
+
+    
+    
 
 
 
     # Initialize Adam optimizer state variables
     adam_params = initialize_adam_parameters(weights + biases)
 
-    loss_val = float('inf')
-    while loss_val > 0.0001:
-        # zero gradients
-        for param in weights + biases:
-            param.grad = np.zeros_like(param.grad)
+    for epoch in range(100):
+        loss_test = None
+        indices = np.random.permutation(len(x_train))
+        batch_indices = np.array_split(indices, len(x_train) // 64)
+        for batch_index in batch_indices:
+            x_batch = Var(x_train[batch_index])
+            y_batch = Var(y_train[batch_index])
+            
+            # zero gradients
+            for param in weights + biases:
+                param.grad = np.zeros_like(param.grad)
 
-        # Forward pass
-        y_pred = forward(x, weights, biases)
+            # Forward pass
+            y_pred = forward(x_batch, weights, biases)
 
-        # Calculate loss (mean squared error)
-        loss = Sum.forward((y_pred - y_target) ** Var(2.0)) * Var(1 / x.val.shape[0])
+            # Calculate loss (mean squared error)
+            loss = Sum.forward((y_pred - y_batch) ** Var(2.0)) * Var(1 / x_batch.val.shape[0])
 
-        # Backward pass
-        loss.backwards(1)
+            # Backward pass
+            loss.backwards(1)
 
-        # Update weights and biases using Adam optimizer
-        update_parameters_adam(weights + biases, [param.grad for param in weights + biases], adam_params)
+            # Update weights and biases using Adam optimizer
+            update_parameters_adam(weights + biases, [param.grad for param in weights + biases], adam_params)
 
-        loss_val = loss.val
+            loss_val = loss.val
+            
+            y_pred_test = forward(Var(x_test_ordered), weights, biases)
+            loss_test = Sum.forward((y_pred_test - Var(y_test)) ** Var(2.0)) * Var(1 / x_test.shape[0])
 
-        print("Loss:", loss_val)
-        line1.set_ydata(forward(x, weights, biases).val)
-        fig.canvas.draw()
-        fig.canvas.flush_events()
-    
+            line1.set_ydata(forward(Var(x_test_ordered), weights, biases).val)
+            fig.canvas.draw()
+            fig.canvas.flush_events()
+        print("Loss:", loss_test.val)
+
+   
     plt.show(block=True)
